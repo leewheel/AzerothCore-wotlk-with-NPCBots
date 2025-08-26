@@ -48,7 +48,7 @@ class CreatureGroup;
 class Creature : public Unit, public GridObject<Creature>, public MovableMapObject, public UpdatableMapObject
 {
 public:
-    explicit Creature(bool isWorldObject = false);
+    explicit Creature();
     ~Creature() override;
 
     void AddToWorld() override;
@@ -388,8 +388,6 @@ public:
     static float _GetDamageMod(int32 Rank);
 
     float m_SightDistance, m_CombatDistance;
-
-    bool m_isTempWorldObject; //true when possessed
 
     // Handling caster facing during spellcast
     void SetTarget(ObjectGuid guid = ObjectGuid::Empty) override;

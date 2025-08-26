@@ -859,11 +859,7 @@ class spell_hun_pet_carrion_feeder : public SpellScript
         // search for nearby enemy corpse in range
         Acore::AnyDeadUnitSpellTargetInRangeCheck check(caster, max_range, GetSpellInfo(), TARGET_CHECK_ENEMY);
         Acore::WorldObjectSearcher<Acore::AnyDeadUnitSpellTargetInRangeCheck> searcher(caster, result, check);
-        Cell::VisitWorldObjects(caster, searcher, max_range);
-        if (!result)
-        {
-            Cell::VisitGridObjects(caster, searcher, max_range);
-        }
+        Cell::VisitObjects(caster, searcher, max_range);
         if (!result)
         {
             return SPELL_FAILED_NO_EDIBLE_CORPSES;
@@ -1363,6 +1359,27 @@ class spell_hun_target_self_and_pet : public SpellScript
     }
 };
 
+// -53301 - Explosive Shot
+class spell_hun_explosive_shot : public SpellScript
+{
+    PrepareSpellScript(spell_hun_explosive_shot);
+
+    void HandleFinish()
+    {
+        // Handling of explosive shot initial cast without LnL proc
+        if (!GetCaster() || !GetCaster()->IsPlayer())
+            return;
+
+        if (!GetCaster()->HasAura(SPELL_LOCK_AND_LOAD_TRIGGER))
+            GetSpell()->TakeAmmo();
+    }
+
+    void Register() override
+    {
+        AfterCast += SpellCastFn(spell_hun_explosive_shot::HandleFinish);
+    }
+};
+
 void AddSC_hunter_spell_scripts()
 {
     RegisterSpellScript(spell_hun_check_pet_los);
@@ -1394,4 +1411,5 @@ void AddSC_hunter_spell_scripts()
     RegisterSpellScript(spell_hun_intimidation);
     RegisterSpellScript(spell_hun_bestial_wrath);
     RegisterSpellScript(spell_hun_target_self_and_pet);
+    RegisterSpellScript(spell_hun_explosive_shot);
 }

@@ -29,7 +29,6 @@
 #include "ObjectAccessor.h"
 //end npcbot
 
-//Totem::Totem(SummonPropertiesEntry const* properties, ObjectGuid owner) : Minion(properties, owner, false)
 Totem::Totem(SummonPropertiesEntry const* properties, ObjectGuid owner) : Minion(properties, owner)
 {
     m_unitTypeMask |= UNIT_MASK_TOTEM;
@@ -81,6 +80,9 @@ void Totem::InitStats(uint32 duration)
             owner->ToPlayer()->SendDirectMessage(data.Write());
 
             // set display id depending on caster's race
+            //npcbot: handled in class AI for bot totems
+            if (!(GetCreatorGUID().IsCreature() && owner->ToPlayer()->HaveBot() && owner->ToPlayer()->GetBotMgr()->GetBot(GetCreatorGUID())))
+            //end npcbot
             SetDisplayId(sObjectMgr->GetModelForTotem(SummonSlot(slot), Races(owner->getRace())));
         }
 
@@ -139,11 +141,11 @@ void Totem::InitSummon()
     }
 }
 
-void Totem::UnSummon(uint32 msTime)
+void Totem::UnSummon(Milliseconds msTime)
 {
-    if (msTime)
+    if (msTime > 0ms)
     {
-        m_Events.AddEvent(new ForcedUnsummonDelayEvent(*this), m_Events.CalculateTime(msTime));
+        m_Events.AddEventAtOffset(new ForcedUnsummonDelayEvent(*this), msTime);
         return;
     }
 

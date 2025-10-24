@@ -45,6 +45,10 @@ class CreatureGroup;
 
 #define MAX_VENDOR_ITEMS 150    // Limitation in 3.x.x item count in SMSG_LIST_INVENTORY
 
+//used for handling non-repeatable random texts
+typedef std::vector<uint8> CreatureTextRepeatIds;
+typedef std::unordered_map<uint8, CreatureTextRepeatIds> CreatureTextRepeatGroup;
+
 class Creature : public Unit, public GridObject<Creature>, public MovableMapObject, public UpdatableMapObject
 {
 public:
@@ -154,10 +158,6 @@ public:
     bool SetWalk(bool enable) override;
     bool SetDisableGravity(bool disable, bool packetOnly = false, bool updateAnimationTier = true) override;
     bool SetSwim(bool enable) override;
-    bool SetCanFly(bool enable, bool packetOnly = false) override;
-    bool SetWaterWalking(bool enable, bool packetOnly = false) override;
-    bool SetFeatherFall(bool enable, bool packetOnly = false) override;
-    bool SetHover(bool enable, bool packetOnly = false, bool updateAnimationTier = true) override;
     bool HasSpellFocus(Spell const* focusSpell = nullptr) const;
 
     struct
@@ -281,6 +281,7 @@ public:
     void DoFleeToGetAssistance();
     void CallForHelp(float fRadius, Unit* target = nullptr);
     void CallAssistance(Unit* target = nullptr);
+    void SetNoCallForHelp(bool val) { m_alreadyCallForHelp = val; }
     void SetNoCallAssistance(bool val) { m_AlreadyCallAssistance = val; }
     void SetNoSearchAssistance(bool val) { m_AlreadySearchedAssistance = val; }
     bool HasSearchedAssistance() { return m_AlreadySearchedAssistance; }
@@ -295,8 +296,7 @@ public:
 
     void RemoveCorpse(bool setSpawnTime = true, bool skipVisibility = false);
 
-    void DespawnOrUnsummon(Milliseconds msTimeToDespawn, Seconds forcedRespawnTimer);
-    void DespawnOrUnsummon(uint32 msTimeToDespawn = 0) { DespawnOrUnsummon(Milliseconds(msTimeToDespawn), 0s); };
+    void DespawnOrUnsummon(Milliseconds msTimeToDespawn = 0ms, Seconds forcedRespawnTimer = 0s);
     void DespawnOnEvade(Seconds respawnDelay = 20s);
 
     [[nodiscard]] time_t const& GetRespawnTime() const { return m_respawnTime; }
@@ -404,6 +404,10 @@ public:
     void UpdateLeashExtensionTime();
     uint8 GetLeashTimer() const;
 
+    CreatureTextRepeatIds const& GetTextRepeatGroup(uint8 textGroup);
+    void SetTextRepeatId(uint8 textGroup, uint8 id);
+    void ClearTextRepeatGroup(uint8 textGroup);
+
     bool IsFreeToMove();
     static constexpr uint32 MOVE_CIRCLE_CHECK_INTERVAL = 3000;
     static constexpr uint32 MOVE_BACKWARDS_CHECK_INTERVAL = 2000;
@@ -446,6 +450,8 @@ public:
     bool IsCombatMovementAllowed() const { return _isCombatMovementAllowed; }
 
     std::string GetDebugInfo() const override;
+
+    bool IsUpdateNeeded() override;
 
     //NPCBots
     bool LoadBotCreatureFromDB(ObjectGuid::LowType guid, Map* map, bool addToMap = true, bool generated = false, uint32 entry = 0, Position const* pos = nullptr);
@@ -524,7 +530,6 @@ public:
     Item* GetBotEquipsByGuid(ObjectGuid itemGuid) const;
     float GetBotAverageItemLevel() const;
     //End NPCBots
-    bool IsUpdateNeeded() override;
 
 protected:
     bool CreateFromProto(ObjectGuid::LowType guidlow, uint32 Entry, uint32 vehId, const CreatureData* data = nullptr);
@@ -559,6 +564,7 @@ protected:
     uint8 m_equipmentId;
     int8 m_originalEquipmentId; // can be -1
 
+    bool m_alreadyCallForHelp;
     bool m_AlreadyCallAssistance;
     bool m_AlreadySearchedAssistance;
     bool m_regenHealth;
@@ -595,7 +601,7 @@ private:
     bot_pet_ai* bot_pet_AI;
     //end bot system
 
-    void ForcedDespawn(uint32 timeMSToDespawn = 0, Seconds forcedRespawnTimer = 0s);
+    void ForcedDespawn(Milliseconds timeMSToDespawn = 0ms, Seconds forcedRespawnTimer = 0s);
 
     [[nodiscard]] bool CanPeriodicallyCallForAssistance() const;
 
@@ -615,6 +621,8 @@ private:
     uint32 m_cannotReachTimer;
 
     Spell const* _focusSpell;   ///> Locks the target during spell cast for proper facing
+
+    CreatureTextRepeatGroup m_textRepeat;
 
     bool _isMissingSwimmingFlagOutOfCombat;
 

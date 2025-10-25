@@ -138,29 +138,6 @@ struct npc_pet_dk_ebon_gargoyle : ScriptedAI
                 RemoveTargetAura();
             }
         }
-                    //npcbot: allow bot summons to select bot's target without being engaged themselves
-        Unit* creator = me->GetCreator();
-        if (creator && creator->IsCreature())
-        {
-            if (!me->GetVictim() || me->GetVictim()->IsImmunedToSpell(sSpellMgr->GetSpellInfo(51963)) || !me->IsValidAttackTarget(me->GetVictim()) || !creator->CanSeeOrDetect(me->GetVictim()))
-            {
-                Unit* selection = creator->GetVictim();
-                if (selection && selection != me->GetVictim() && me->IsValidAttackTarget(selection))
-                {
-                    me->GetMotionMaster()->Clear(false);
-                    SetGazeOn(selection);
-                }
-                else if (!me->GetVictim() || !creator->CanSeeOrDetect(me->GetVictim()))
-                {
-                    me->CombatStop(true);
-                    me->GetMotionMaster()->Clear(false);
-                    me->GetMotionMaster()->MoveFollow(creator, PET_FOLLOW_DIST, 0.0f);
-                    RemoveTargetAura();
-                }
-            }
-            return;
-        }
-        //end npcbot
     }
 
     void AttackStart(Unit* who) override
@@ -212,7 +189,7 @@ struct npc_pet_dk_ebon_gargoyle : ScriptedAI
         _despawning = true;
     }
 
-void UpdateAI(uint32 diff) override
+    void UpdateAI(uint32 diff) override
     {
         if (_initialSelection)
         {

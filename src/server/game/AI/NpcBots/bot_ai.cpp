@@ -8178,6 +8178,8 @@ bool bot_ai::OnGossipHello(Player* player, uint32 /*option*/)
                     break;
             }
 
+            // Rename bot option
+            AddGossipItemFor(player, GOSSIP_ICON_CHAT, LocalizedNpcText(player, BOT_TEXT_RENAME_BOT), GOSSIP_SENDER_RENAME_BOT, GOSSIP_ACTION_INFO_DEF + 1);
             std::ostringstream astr;
             astr << LocalizedNpcText(player, BOT_TEXT_ABANDON_WARN_1) << me->GetName() << "? " << (BotMgr::IsEnrageOnDimissEnabled() ? LocalizedNpcText(player, BOT_TEXT_ABANDON_WARN_2) : "");
             player->PlayerTalkClass->GetGossipMenu().AddMenuItem(-1, GOSSIP_ICON_TAXI, LocalizedNpcText(player, BOT_TEXT_UR_DISMISSED),
@@ -11299,6 +11301,17 @@ bool bot_ai::OnGossipSelect(Player* player, Creature* creature/* == me*/, uint32
             }
             break;
         }
+        case GOSSIP_SENDER_RENAME_BOT:
+        {
+            // Show input dialog for renaming
+            player->PlayerTalkClass->SendCloseGossip();
+            player->PlayerTalkClass->GetGossipMenu().AddMenuItem(-1, GOSSIP_ICON_CHAT,
+                LocalizedNpcText(player, BOT_TEXT_RENAME_BOT_INPUT),
+                GOSSIP_SENDER_RENAME_BOT, GOSSIP_ACTION_INFO_DEF + 1,
+                LocalizedNpcText(player, BOT_TEXT_RENAME_BOT_INPUT), 0, true);
+            player->PlayerTalkClass->SendGossipMenu(gossipTextId, me->GetGUID());
+            return true;
+        }
         case GOSSIP_SENDER_TROUBLESHOOTING:
         {
             subMenu = true;
@@ -11558,6 +11571,75 @@ bool bot_ai::OnGossipSelectCode(Player* player, Creature* creature/* == me*/, ui
 
     switch (sender)
     {
+        case GOSSIP_SENDER_RENAME_BOT:
+        {
+            std::string newName(code);
+            ChatHandler ch(player->GetSession());
+
+            // Validate name length (2-36 bytes to support Chinese characters)
+            // Chinese characters are typically 3 bytes each in UTF-8
+            if (newName.length() < 2 || newName.length() > 36)
+            {
+                ch.PSendSysMessage(LocalizedNpcText(player, BOT_TEXT_RENAME_INVALID_LENGTH).c_str());
+                player->PlayerTalkClass->SendCloseGossip();
+                return true;
+            }
+
+            // Validate name characters - only block SQL injection dangerous characters
+            bool valid = true;
+            for (char c : newName)
+            {
+                // Block: single quote, double quote, backslash, semicolon, SQL comments
+                if (c == '\'' || c == '\"' || c == '\\' || c == ';' || c == '<' || c == '>')
+                {
+                    valid = false;
+                    break;
+                }
+            }
+
+            if (!valid)
+            {
+                ch.PSendSysMessage(LocalizedNpcText(player, BOT_TEXT_RENAME_INVALID_CHARS).c_str());
+                player->PlayerTalkClass->SendCloseGossip();
+                return true;
+            }
+
+            // Update database - both main and locale tables
+            try
+            {
+                // Update creature_template table
+                WorldDatabase.Execute("UPDATE creature_template SET name = '{}' WHERE entry = {}", newName, me->GetEntry());
+
+                // Update creature_template_locale table for common locales
+                // Update for all locale variants (zhCN, zhTW, enUS, etc.)
+                const char* locales[] = { "zhCN", "zhTW", "enUS", "koKR", "frFR", "deDE", "esES", "esMX", "ruRU" };
+                for (const char* locale : locales)
+                {
+                    WorldDatabase.Execute("REPLACE INTO creature_template_locale (entry, locale, Name, Title) VALUES ('{}', '{}', '{}', NULL)",
+                        me->GetEntry(), locale, newName);
+                }
+
+                // Update creature name in memory
+                if (CreatureTemplate const* cInfo = const_cast<CreatureTemplate*>(me->GetCreatureTemplate()))
+                {
+                    const_cast<CreatureTemplate*>(cInfo)->Name = newName;
+                }
+
+                // Update the creature's cached name
+                me->SetName(newName);
+
+                // Notify player
+                ch.PSendSysMessage(LocalizedNpcText(player, BOT_TEXT_RENAME_SUCCESS).c_str());
+            }
+            catch (const std::exception& e)
+            {
+                ch.PSendSysMessage("数据库更新失败: %s", e.what());
+            }
+
+            // Close gossip and return
+            player->PlayerTalkClass->SendCloseGossip();
+            return true;
+        }
         case GOSSIP_SENDER_FORMATION_FOLLOW_DISTANCE_SET:
         {
             char* dist = strtok((char*)code, "");

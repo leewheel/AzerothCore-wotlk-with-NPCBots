@@ -428,7 +428,12 @@ enum BotTexts : uint32
     BOT_TEXT_DELETE                         = 70691, //"Delete"
     BOT_TEXT_EQUIP                          = 70692, //"Equip"
     BOT_TEXT_MISSING                        = 70693, //"missing"
-    //70694-71000 reserved for custom localization strings
+    BOT_TEXT_RENAME_BOT                     = 70694, //"修改名字"
+    BOT_TEXT_RENAME_BOT_INPUT               = 70695, //"输入新名字（2-12个字符，支持中文）"
+    BOT_TEXT_RENAME_SUCCESS                 = 70696, //"机器人改名成功！"
+    BOT_TEXT_RENAME_INVALID_LENGTH          = 70697, //"名字长度必须在2-36个字节之间（约2-12个字符）"
+    BOT_TEXT_RENAME_INVALID_CHARS           = 70698, //"名字不能包含特殊字符：' \" \\ ; < >"
+    //70699-71000 reserved for custom localization strings
 };
 
 #endif //BOTTEXT_H

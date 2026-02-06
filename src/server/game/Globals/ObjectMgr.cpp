@@ -3181,7 +3181,10 @@ void ObjectMgr::LoadItemTemplates()
             {
                 case ITEM_MOD_SPELL_HEALING_DONE:
                 case ITEM_MOD_SPELL_DAMAGE_DONE:
-                    LOG_WARN("sql.sql", "Item (Entry: {}) has deprecated stat_type{} ({})", entry, j + 1, itemTemplate.ItemStat[j].ItemStatType);
+                    // Skip warning for specific items: 13113 (Feathermoon Headdress - Blizzard oversight), 34967 (test item)
+                    if (entry != 13113 && entry != 34967)
+                        LOG_WARN("sql.sql", "Item (Entry: {}) has deprecated stat_type{} ({})", entry, j + 1, itemTemplate.ItemStat[j].ItemStatType);
+
                     break;
                 default:
                     break;
@@ -4744,10 +4747,10 @@ void ObjectMgr::LoadQuests()
     }
 
     // Load `quest_template_addon`
-    //                                   0   1         2                 3              4            5            6               7                     8
-    result = WorldDatabase.Query("SELECT ID, MaxLevel, AllowableClasses, SourceSpellID, PrevQuestID, NextQuestID, ExclusiveGroup, RewardMailTemplateID, RewardMailDelay, "
-                                 //9               10                   11                     12                     13                   14                   15                 16                     17
-                                 "RequiredSkillID, RequiredSkillPoints, RequiredMinRepFaction, RequiredMaxRepFaction, RequiredMinRepValue, RequiredMaxRepValue, ProvidedItemCount, RewardMailSenderEntry, SpecialFlags FROM quest_template_addon LEFT JOIN quest_mail_sender ON Id=QuestId");
+    //                                   0   1         2                 3              4            5            6               7                      8
+    result = WorldDatabase.Query("SELECT ID, MaxLevel, AllowableClasses, SourceSpellID, PrevQuestID, NextQuestID, ExclusiveGroup, BreadcrumbForQuestId, RewardMailTemplateID, "
+                                 //9                10               11                   12                     13                     14                   15                   16                 17                     18
+                                 "RewardMailDelay, RequiredSkillID, RequiredSkillPoints, RequiredMinRepFaction, RequiredMaxRepFaction, RequiredMinRepValue, RequiredMaxRepValue, ProvidedItemCount, RewardMailSenderEntry, SpecialFlags FROM quest_template_addon LEFT JOIN quest_mail_sender ON Id=QuestId");
 
     if (!result)
     {
@@ -5324,10 +5327,52 @@ void ObjectMgr::LoadQuests()
 
         if (qinfo->ExclusiveGroup)
             mExclusiveQuestGroups.insert(std::pair<int32, uint32>(qinfo->ExclusiveGroup, qinfo->GetQuestId()));
+
+        if (uint32 breadcrumbForQuestId = qinfo->GetBreadcrumbForQuestId())
+        {
+            if (_questTemplates.find(breadcrumbForQuestId) == _questTemplates.end())
+                LOG_ERROR("sql.sql", "Quest {} has BreadcrumbForQuestId {}, but no such quest exists", qinfo->GetQuestId(), breadcrumbForQuestId);
+            else
+                _breadcrumbsForQuest[breadcrumbForQuestId].push_back(qinfo->GetQuestId());
+
+            if (qinfo->GetNextQuestId())
+                LOG_ERROR("sql.sql", "Quest {} is a breadcrumb quest but also has NextQuestID {} set", qinfo->GetQuestId(), qinfo->GetNextQuestId());
+            if (qinfo->GetExclusiveGroup())
+                LOG_ERROR("sql.sql", "Quest {} is a breadcrumb quest but also has ExclusiveGroup {} set", qinfo->GetQuestId(), qinfo->GetExclusiveGroup());
+        }
+
         if (qinfo->TimeAllowed)
             qinfo->SetSpecialFlag(QUEST_SPECIAL_FLAGS_TIMED);
         if (qinfo->RequiredPlayerKills)
             qinfo->SetSpecialFlag(QUEST_SPECIAL_FLAGS_PLAYER_KILL);
+    }
+
+    for (auto const& [questId, quest] : _questTemplates)
+    {
+        if (sDisableMgr->IsDisabledFor(DISABLE_TYPE_QUEST, questId, nullptr))
+            continue;
+
+        uint32 breadcrumbForQuestId = quest->GetBreadcrumbForQuestId();
+        if (!breadcrumbForQuestId)
+            continue;
+
+        std::set<uint32> visitedQuests;
+        visitedQuests.insert(questId);
+
+        while (breadcrumbForQuestId)
+        {
+            if (!visitedQuests.insert(breadcrumbForQuestId).second)
+            {
+                LOG_ERROR("sql.sql", "Breadcrumb quests {} and {} form a loop", questId, breadcrumbForQuestId);
+                break;
+            }
+
+            Quest const* targetQuest = GetQuestTemplate(breadcrumbForQuestId);
+            if (!targetQuest)
+                break;
+
+            breadcrumbForQuestId = targetQuest->GetBreadcrumbForQuestId();
+        }
     }
 
     // check QUEST_SPECIAL_FLAGS_EXPLORATION_OR_EVENT for spell with SPELL_EFFECT_QUEST_COMPLETE
@@ -9709,6 +9754,28 @@ void ObjectMgr::LoadGossipMenuItems()
 
         _gossipMenuItemsStore.insert(GossipMenuItemsContainer::value_type(gMenuItem.MenuID, gMenuItem));
     } while (result->NextRow());
+
+    // Warn if any trainer creature templates reference a GossipMenuId that has no gossip_menu_option entries
+    // This will cause the gossip menu to fallback to MenuID 0 at runtime which will display: "I wish to unlearn my talents."
+    std::set<uint32> checkedMenuIds;
+    for (auto const& [entry, tmpl] : _creatureTemplateStore)
+    {
+        uint32 menuId = tmpl.GossipMenuId;
+        if (!menuId)
+            continue;
+
+        if (!(tmpl.npcflag & UNIT_NPC_FLAG_TRAINER))
+            continue;
+
+        if (checkedMenuIds.contains(menuId))
+            continue;
+
+        checkedMenuIds.insert(menuId);
+
+        auto [first, second] = _gossipMenuItemsStore.equal_range(menuId);
+        if (first == second)
+            LOG_WARN("server.loading", "Trainer creature template references GossipMenuId {} has no `gossip_menu_option` entries. This will fallback to MenuID 0.", menuId);
+    }
 
     LOG_INFO("server.loading", ">> Loaded {} gossip_menu_option entries in {} ms", uint32(_gossipMenuItemsStore.size()), GetMSTimeDiffToNow(oldMSTime));
     LOG_INFO("server.loading", " ");

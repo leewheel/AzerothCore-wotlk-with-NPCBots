@@ -5660,12 +5660,13 @@ class spell_item_pet_healing : public AuraScript
     void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
     {
         PreventDefaultAction();
-        DamageInfo* damageInfo = eventInfo.GetDamageInfo();
-        if (!damageInfo || !damageInfo->GetDamage())
+        HealInfo* healInfo = eventInfo.GetHealInfo();
+        if (!healInfo || !healInfo->GetHeal())
             return;
 
-        int32 bp0 = CalculatePct(static_cast<int32>(damageInfo->GetDamage()), aurEff->GetAmount());
-        eventInfo.GetActor()->CastCustomSpell(SPELL_HEALTH_LINK, SPELLVALUE_BASE_POINT0, bp0, nullptr, true, nullptr, aurEff);
+        Unit* caster = eventInfo.GetActor();
+        int32 bp0 = CalculatePct(static_cast<int32>(healInfo->GetHeal()), aurEff->GetAmount());
+        caster->CastCustomSpell(SPELL_HEALTH_LINK, SPELLVALUE_BASE_POINT0, bp0, nullptr, true, nullptr, aurEff);
     }
 
     void Register() override

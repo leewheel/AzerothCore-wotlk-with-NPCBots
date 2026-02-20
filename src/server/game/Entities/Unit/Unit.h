@@ -382,10 +382,6 @@ public:
     [[nodiscard]] uint32 GetHitMask() const;
     void AddHitMask(uint32 hitMask) { m_hitMask |= hitMask; }
     [[nodiscard]] uint32 GetUnmitigatedDamage() const;
-
-    //npcbot
-    [[nodiscard]] uint32 GetHitMask() const { return m_procEx; }
-    //end npcbot
 };
 
 class HealInfo
